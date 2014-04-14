@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful/swagger"
@@ -35,12 +36,30 @@ type UserResource struct {
 	users map[string]User
 }
 
+func (u UserResource) selectUsersWithNameMatching(like String) []User {
+	selected := []User{}
+	for _, each := range u.users {
+		matched, _ := regexp.MatchString(like, each.Name)
+		if matched {
+			selected = append(selected, each)
+		}
+	}
+	return selected
+}
+
 func (u UserResource) Register(container *restful.Container) {
 	ws := new(restful.WebService)
 	ws.
 		Path("/users").
 		Consumes(restful.MIME_XML, restful.MIME_JSON).
 		Produces(restful.MIME_JSON, restful.MIME_XML) // you can specify this per route as well
+
+	ws.Route(ws.GET("/").To(u.findUsers).
+		// docs
+		Doc("get all users whose name match the query paramter value expression").
+		Operation("findUsers").
+		Param(ws.QueryParameter("like", "pattern to match the name of a user").DefaultValue(".*").DataType("string")).
+		Writes([]User{})) // on the response
 
 	ws.Route(ws.GET("/{user-id}").To(u.findUser).
 		// docs
@@ -69,6 +88,13 @@ func (u UserResource) Register(container *restful.Container) {
 		Param(ws.PathParameter("user-id", "identifier of the user").DataType("string")))
 
 	container.Add(ws)
+}
+
+// GET http://localhost:8080/users
+//
+func (u UserResource) findUsers(request *restful.Request, response *restful.Response) {
+	like := request.QueryParameter("like")
+	response.WriteEntity(u.selectUsersWithNameMatching(like))
 }
 
 // GET http://localhost:8080/users/1

@@ -142,11 +142,23 @@ func (b *RouteBuilder) Build() Route {
 		Operation:     b.operation,
 		ParameterDocs: b.parameters,
 		ReadSample:    b.readSample,
-		WriteSample:   b.writeSample}
+		WriteSample:   b.writeSample,
+		QueryDefaults: b.collectQueryDefaults()}
 	route.postBuild()
 	return route
 }
 
 func concatPath(path1, path2 string) string {
 	return strings.TrimRight(path1, "/") + "/" + strings.TrimLeft(path2, "/")
+}
+
+// collectQueryDefaults visits all query parameters and collects any default values (non-empty).
+func (b RouteBuilder) collectQueryDefaults() map[string]string {
+	queryDefaults := map[string]string{}
+	for _, each := range b.parameters {
+		if v := each.data.DefaultValue; len(v) > 0 {
+			queryDefaults[each.data.Name] = v
+		}
+	}
+	return queryDefaults
 }

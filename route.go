@@ -15,12 +15,13 @@ type RouteFunction func(*Request, *Response)
 
 // Route binds a HTTP Method,Path,Consumes combination to a RouteFunction.
 type Route struct {
-	Method   string
-	Produces []string
-	Consumes []string
-	Path     string // webservice root path + described path
-	Function RouteFunction
-	Filters  []FilterFunction
+	Method        string
+	Produces      []string
+	Consumes      []string
+	Path          string // webservice root path + described path
+	Function      RouteFunction
+	Filters       []FilterFunction
+	QueryDefaults map[string]string
 
 	// cached values for dispatching
 	relativePath string
@@ -42,9 +43,12 @@ func (r *Route) postBuild() {
 // Create Request and Response from their http versions
 func (r *Route) wrapRequestResponse(httpWriter http.ResponseWriter, httpRequest *http.Request) (*Request, *Response) {
 	params := r.extractParameters(httpRequest.URL.Path)
+	// request
 	wrappedRequest := newRequest(httpRequest)
 	wrappedRequest.pathParameters = params
 	wrappedRequest.selectedRoutePath = r.Path
+	wrappedRequest.queryDefaults = r.QueryDefaults
+	// response
 	wrappedResponse := NewResponse(httpWriter)
 	wrappedResponse.requestAccept = httpRequest.Header.Get(HEADER_Accept)
 	wrappedResponse.routeProduces = r.Produces

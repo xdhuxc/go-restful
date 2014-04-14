@@ -20,13 +20,15 @@ type Request struct {
 	pathParameters    map[string]string
 	attributes        map[string]interface{} // for storing request-scoped values
 	selectedRoutePath string                 // root path + route path that matched the request, e.g. /meetings/{id}/attendees
+	queryDefaults     map[string]string
 }
 
 func newRequest(httpRequest *http.Request) *Request {
 	return &Request{
 		Request:        httpRequest,
 		pathParameters: map[string]string{},
-		attributes:     map[string]interface{}{},
+		attributes:     map[string]interface{}{}, // TODO lazy init this? garbage!
+		queryDefaults:  map[string]string{},
 	} // empty parameters, attributes
 }
 
@@ -42,7 +44,12 @@ func (r *Request) PathParameters() map[string]string {
 
 // QueryParameter returns the (first) Query parameter value by its name
 func (r *Request) QueryParameter(name string) string {
-	return r.Request.FormValue(name)
+	v := r.Request.FormValue(name)
+	if len(v) == 0 {
+		// see if a default was specified
+		v = r.queryDefaults[name]
+	}
+	return v
 }
 
 // BodyParameter parses the body of the request (once for typically a POST or a PUT) and returns the value of the given name or an error.
