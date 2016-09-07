@@ -6,6 +6,7 @@ import (
 	"github.com/emicklei/go-restful"
 	// "github.com/emicklei/hopwatch"
 	"net/http"
+	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -93,7 +94,13 @@ func RegisterSwaggerService(config Config, wsContainer *restful.Container) {
 		}
 
 		LogInfo("[restful/swagger] %v%v is mapped to folder %v", config.WebServicesUrl, swaggerPathSlash, config.SwaggerFilePath)
-		wsContainer.Handle(swaggerPathSlash, http.StripPrefix(swaggerPathSlash, http.FileServer(http.Dir(config.SwaggerFilePath))))
+		fileHandler := http.StripPrefix(swaggerPathSlash, http.FileServer(http.Dir(config.SwaggerFilePath)))
+		redirect := redirectWithURLParameterHandler{
+			config:      config,
+			URL:         "http://localhost:8080/apidocs/?url=http://localhost:8080/apidocs.json",
+			fileHandler: fileHandler,
+		}
+		wsContainer.Handle(swaggerPathSlash, redirect)
 
 		//if we define a custom static handler use it
 	} else if config.StaticHandler != nil && config.SwaggerPath != "" {
@@ -110,6 +117,25 @@ func RegisterSwaggerService(config Config, wsContainer *restful.Container) {
 	} else {
 		LogInfo("[restful/swagger] Swagger(File)Path is empty ; no UI is served")
 	}
+}
+
+type redirectWithURLParameterHandler struct {
+	config      Config
+	URL         string
+	fileHandler http.Handler
+}
+
+func (h redirectWithURLParameterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == h.config.SwaggerPath {
+		_ = r.ParseForm()
+		if len(r.Form.Get("url")) == 0 {
+			// TODO handle other query parameter already present
+			withUrl, _ := url.Parse(r.URL.String() + "?url=" + h.config.WebServicesUrl + h.config.ApiPath)
+			http.Redirect(w, r, withUrl.String(), http.StatusMovedPermanently)
+			return
+		}
+	}
+	h.fileHandler.ServeHTTP(w, r)
 }
 
 func staticPathFromRoute(r restful.Route) string {
