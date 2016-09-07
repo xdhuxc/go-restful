@@ -35,4 +35,6 @@ type Config struct {
 	Info Info
 	// [optional] If set, model builder should call this handler to get addition typename-to-swagger-format-field convertion.
 	SchemaFormatHandler MapSchemaFormatFunc
+	// on default no HTTP redirection is performed when serving apidocs with the url query parameter.
+	RedirectWithUrlParameter bool
 }

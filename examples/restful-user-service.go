@@ -128,8 +128,9 @@ func main() {
 		ApiPath:        "/apidocs.json",
 
 		// Optionally, specifiy where the UI is located
-		SwaggerPath:     "/apidocs/",
-		SwaggerFilePath: "/Users/emicklei/Projects/swagger-ui/dist"}
+		SwaggerPath:              "/apidocs/",
+		SwaggerFilePath:          "/Users/emicklei/Projects/swagger-ui/dist",
+		RedirectWithUrlParameter: true}
 	swagger.InstallSwaggerService(config)
 
 	log.Printf("start listening on localhost:8080")
