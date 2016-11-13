@@ -97,7 +97,6 @@ func RegisterSwaggerService(config Config, wsContainer *restful.Container) {
 		fileHandler := http.StripPrefix(swaggerPathSlash, http.FileServer(http.Dir(config.SwaggerFilePath)))
 		redirect := redirectWithURLParameterHandler{
 			config:      config,
-			URL:         "http://localhost:8080/apidocs/?url=http://localhost:8080/apidocs.json",
 			fileHandler: fileHandler,
 		}
 		wsContainer.Handle(swaggerPathSlash, redirect)
@@ -121,17 +120,25 @@ func RegisterSwaggerService(config Config, wsContainer *restful.Container) {
 
 type redirectWithURLParameterHandler struct {
 	config      Config
-	URL         string
 	fileHandler http.Handler
 }
 
 func (h redirectWithURLParameterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// only redirect when on base path
 	if r.URL.Path == h.config.SwaggerPath {
-		_ = r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			http.NotFound(w, r)
+			return
+		}
 		if len(r.Form.Get("url")) == 0 {
-			// TODO handle other query parameter already present
-			withUrl, _ := url.Parse(r.URL.String() + "?url=" + h.config.WebServicesUrl + h.config.ApiPath)
-			http.Redirect(w, r, withUrl.String(), http.StatusMovedPermanently)
+			// modify the request parameters
+			r.Form.Set("url", h.config.WebServicesUrl+h.config.ApiPath)
+			withURL, err := url.Parse(r.URL.String())
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			http.Redirect(w, r, withURL.String(), http.StatusMovedPermanently)
 			return
 		}
 	}
