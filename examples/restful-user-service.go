@@ -129,7 +129,7 @@ func main() {
 
 		// Optionally, specifiy where the UI is located
 		SwaggerPath:              "/apidocs/",
-		SwaggerFilePath:          "/Users/emicklei/Projects/swagger-ui/dist",
+		SwaggerFilePath:          "/Users/emicklei/xProjects/swagger-ui/dist",
 		RedirectWithUrlParameter: true}
 	swagger.InstallSwaggerService(config)
 
