@@ -1,4 +1,4 @@
-package log
+package restful
 
 import (
 	stdlog "log"
@@ -16,11 +16,6 @@ var Logger StdLogger
 func init() {
 	// default Logger
 	SetLogger(stdlog.New(os.Stderr, "[restful] ", stdlog.LstdFlags|stdlog.Lshortfile))
-}
-
-// SetLogger sets the logger for this package
-func SetLogger(customLogger StdLogger) {
-	Logger = customLogger
 }
 
 // Print delegates to the Logger
