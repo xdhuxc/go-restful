@@ -1,6 +1,8 @@
 package restful
 
 import (
+	"context"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,17 +28,27 @@ func TestContainer_HandleWithFilter(t *testing.T) {
 	postfilterCalled := false
 	httpHandlerCalled := false
 
+	contextAvailable := false
+
 	wc := NewContainer()
 	wc.Filter(func(request *Request, response *Response, chain *FilterChain) {
 		prefilterCalled = true
+		request.Request = request.Request.WithContext(context.WithValue(request.Request.Context(), "prefilterContextSet", "true"))
 		chain.ProcessFilter(request, response)
 	})
 	wc.HandleWithFilter("/", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		httpHandlerCalled = true
+		_, ok1 := req.Context().Value("prefilterContextSet").(string)
+		_, ok2 := req.Context().Value("postfilterContextSet").(string)
+		if ok1 && ok2 {
+			contextAvailable = true
+		}
+
 		w.Write([]byte("ok"))
 	}))
 	wc.Filter(func(request *Request, response *Response, chain *FilterChain) {
 		postfilterCalled = true
+		request.Request = request.Request.WithContext(context.WithValue(request.Request.Context(), "postfilterContextSet", "true"))
 		chain.ProcessFilter(request, response)
 	})
 
@@ -57,6 +69,9 @@ func TestContainer_HandleWithFilter(t *testing.T) {
 	}
 	if !httpHandlerCalled {
 		t.Errorf("handler added by calling HandleWithFilter wasn't called")
+	}
+	if !contextAvailable {
+		t.Errorf("Context not available in http handler")
 	}
 }
 
@@ -79,5 +94,68 @@ func TestContainerAddAndRemove(t *testing.T) {
 	}
 	if wc.isRegisteredOnRoot {
 		t.Errorf("expected not on root registered")
+	}
+}
+
+func TestContainerCompressResponse(t *testing.T) {
+	wc := NewContainer()
+	ws := new(WebService).Path("/")
+	ws.Route(ws.GET("/").To(dummy))
+	wc.Add(ws)
+
+	// no accept header, encoding disabled
+	{
+		recorder := httptest.NewRecorder()
+		request, _ := http.NewRequest("GET", "/", nil)
+		wc.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("unexpected code %d", recorder.Code)
+		}
+		if recorder.Body.String() != "dummy" {
+			t.Errorf("unexpected body %s", recorder.Body.String())
+		}
+	}
+
+	// with gzip accept header, encoding disabled
+	{
+		recorder := httptest.NewRecorder()
+		request, _ := http.NewRequest("GET", "/", nil)
+		request.Header.Set("accept-encoding", "gzip")
+		wc.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("unexpected code %d", recorder.Code)
+		}
+		if recorder.Body.String() != "dummy" {
+			t.Errorf("unexpected body %s", recorder.Body.String())
+		}
+	}
+
+	// no accept header, encoding enabled
+	{
+		wc.EnableContentEncoding(true)
+		recorder := httptest.NewRecorder()
+		request, _ := http.NewRequest("GET", "/", nil)
+		wc.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("unexpected code %d", recorder.Code)
+		}
+		if recorder.Body.String() != "dummy" {
+			t.Errorf("unexpected body %s", recorder.Body.String())
+		}
+	}
+
+	// with accept gzip header, encoding enabled
+	{
+		wc.EnableContentEncoding(true)
+		recorder := httptest.NewRecorder()
+		request, _ := http.NewRequest("GET", "/", nil)
+		request.Header.Set("accept-encoding", "gzip")
+		wc.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("unexpected code %d", recorder.Code)
+		}
+		if hex.EncodeToString(recorder.Body.Bytes()) == hex.EncodeToString(gzippedDummy()) {
+			t.Errorf("unexpected body %v", recorder.Body.Bytes())
+		}
 	}
 }
