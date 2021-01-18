@@ -7,21 +7,9 @@ package restful
 import (
 	"bytes"
 	"compress/zlib"
-	"io"
 	"io/ioutil"
 	"net/http"
-	"sync"
 )
-
-var pool sync.Pool
-
-func init() {
-	pool = sync.Pool{
-		New: func() interface{} {
-			return bytes.NewBuffer(make([]byte, 2048))
-		},
-	}
-}
 
 var defaultRequestContentType string
 
@@ -86,20 +74,48 @@ func (r *Request) HeaderParameter(name string) string {
 
 // ReadEntity checks the Accept header and reads the content into the entityPointer.
 func (r *Request) ReadEntity(entityPointer interface{}) (err error) {
-	buffer := pool.Get().(*bytes.Buffer)
-	buffer.Reset()
-	defer func() {
-		if buffer != nil {
-			pool.Put(buffer)
-			buffer = nil
+	contentType := r.Request.Header.Get(HEADER_ContentType)
+	contentEncoding := r.Request.Header.Get(HEADER_ContentEncoding)
+	// check if the request body needs decompression
+	if ENCODING_GZIP == contentEncoding {
+		gzipReader := currentCompressorProvider.AcquireGzipReader()
+		defer currentCompressorProvider.ReleaseGzipReader(gzipReader)
+		gzipReader.Reset(r.Request.Body)
+		r.Request.Body = gzipReader
+	} else if ENCODING_DEFLATE == contentEncoding {
+		zlibReader, err := zlib.NewReader(r.Request.Body)
+		if err != nil {
+			return err
 		}
-	}()
-	_, err = io.Copy(buffer, r.Request.Body)
-	if err != nil {
-		return err
+		r.Request.Body = zlibReader
+	}
+
+	// lookup the EntityReader, use defaultRequestContentType if needed and provided
+	entityReader, ok := entityAccessRegistry.accessorAt(contentType)
+	if !ok {
+		if len(defaultRequestContentType) != 0 {
+			entityReader, ok = entityAccessRegistry.accessorAt(defaultRequestContentType)
+		}
+		if !ok {
+			return NewError(http.StatusBadRequest, "Unable to unmarshal content of type:"+contentType)
+		}
+	}
+
+	return entityReader.Read(r, entityPointer)
+}
+
+// Read checks the Accept header and reads the content into the entityPointer and remains body of request .
+func (r *Request) Read(entityPointer interface{}) (err error) {
+	var bodyInBytes []byte
+	if r.Request.Body != nil {
+		bodyInBytes, err = ioutil.ReadAll(r.Request.Body)
+		if err != nil {
+			return err
+		}
 	}
 	// store request body for use
-	r.Request.Body = ioutil.NopCloser(bytes.NewReader(buffer.Bytes()))
+	body := ioutil.NopCloser(bytes.NewBuffer(bodyInBytes))
+	r.Request.Body = body
 
 	contentType := r.Request.Header.Get(HEADER_ContentType)
 	contentEncoding := r.Request.Header.Get(HEADER_ContentEncoding)
@@ -130,7 +146,7 @@ func (r *Request) ReadEntity(entityPointer interface{}) (err error) {
 
 	err = entityReader.Read(r, entityPointer)
 	// assign request body again
-	r.Request.Body = ioutil.NopCloser(bytes.NewReader(buffer.Bytes()))
+	r.Request.Body = body
 
 	return err
 }

@@ -27,7 +27,7 @@ func (r RouterJSR311) SelectRoute(
 	// Identify the root resource class (WebService)
 	dispatcher, finalMatch, err := r.detectDispatcher(httpRequest.URL.Path, webServices)
 	if err != nil {
-		return nil, nil, NewError(http.StatusNotFound, "")
+		return nil, nil, NewError(http.StatusNotFound, err.Error())
 	}
 	// Obtain the set of candidate methods (Routes)
 	routes := r.selectRoutes(dispatcher, finalMatch)
@@ -37,6 +37,7 @@ func (r RouterJSR311) SelectRoute(
 
 	// Identify the method (Route) that will handle the request
 	route, ok := r.detectRoute(routes, httpRequest)
+
 	return dispatcher, route, ok
 }
 
